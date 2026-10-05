@@ -411,6 +411,9 @@ ol.hechos time{color:var(--muted);font-variant-numeric:tabular-nums;white-space:
 @media (max-width:820px){.pairs{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:600px){ol.hechos li{grid-template-columns:1.4rem auto minmax(0,1fr);gap:.5rem}}
 @media print{.pair,.boletas,ol.hechos li{break-inside:avoid}}
+
+/* Avance mensual: dos cifras lado a lado */
+.stats.mes{grid-template-columns:repeat(2,minmax(0,1fr))}
 </style>
 </head>
 <body>
@@ -736,6 +739,25 @@ const ESTADO = { verde:"Verde", amarillo:"Amarillo", rojo:"Rojo" };
 const MES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 const etiqueta = x => { const [y,m] = x.id.split("-"); return `<strong>N° ${x.numero}</strong> · ${MES[+m-1]} ${y}`; };
 
+/* Avance mensual: lo que falta por ejecutar repartido
+   en los meses que quedan hasta el término, y lo avanzado desde el informe anterior de esta página.
+   En el primer informe publicado de una obra no hay mes anterior y se muestra solo la primera cifra. */
+const diasDelMes = (y,m) => new Date(y, m, 0).getDate();
+const mesesEntre = (a,b) => { const [da,ma,ya] = a.split("-").map(Number), [db,mb,yb] = b.split("-").map(Number); return (yb-ya)*12 + (mb-ma) + (db-da)/diasDelMes(yb,mb); };
+function avanceMensual(R, prev){
+  const meses = mesesEntre(R.cierre, R.proyecto.termino), falta = (1 - R.avance.ejecutado) * 100;
+  return { meses, falta, necesario: falta / meses, prev, ultimoMes: prev ? (R.avance.ejecutado - prev.avance.ejecutado) * 100 : null };
+}
+const textoMensual = R => { const M = R.mes; return `Para terminar en plazo se necesitan ${n(M.necesario,1)} puntos de avance por mes${M.ultimoMes!=null?`; en el último mes se avanzaron ${n(M.ultimoMes,1)}`:""}.`; };
+function bloqueMensual(R){
+  const M = R.mes, lento = M.ultimoMes!=null && M.ultimoMes < M.necesario;
+  return `<h3>Avance mensual</h3>
+    <dl class="stats mes">
+      ${stat("Avance necesario para terminar en plazo", n(M.necesario,1)+" puntos", `Por mes hasta el término (${R.proyecto.termino}); faltan ${n(M.falta,2)}%`)}
+      ${M.ultimoMes!=null?stat("Avance del último mes", n(M.ultimoMes,1)+" puntos", `De ${n(M.prev.avance.ejecutado*100,2)}% a ${n(R.avance.ejecutado*100,2)}% en ${R.periodo.toLowerCase()}`, lento?"neg":"pos"):""}
+    </dl>`;
+}
+
 /* Indicadores derivados de los datos base del informe */
 function derivar(R){
   const C = R.contrato, A = R.avance, E = R.eepp;
@@ -761,7 +783,6 @@ function derivar(R){
     nAnt: new Set(E.filter(esAnt).map(e=>e[0].split(" ")[1])).size,
     adPres: L.reduce((s,a)=>s+a[3],0), adApr: L.reduce((s,a)=>s+a[4],0)
   };
-  R.d.ritmo = A.ejecutado / R.d.transcurrido;
   R.d.brecha = (R.d.certificado - A.ejecutado) * 100;
   return R;
 }
@@ -912,47 +933,16 @@ function vContrato(R){
     <p class="src">La boleta de fiel cumplimiento vence ${rel(G.fiel.vence)} del término contractual (${P.termino}) y las de anticipo vencen ${rel(an.vence)}. Las retenciones se devuelven ${lc(G.retencionDevolucion)}.</p>`);
 }
 
-/* Avance necesario por mes para terminar en plazo, y avance del último mes */
-function ritmoTermino(R){
-  const ej = R.avance.ejecutado, rest = R.plazo.restantes;
-  const req = rest > 0 ? (1 - ej) * 100 * 30 / rest : null;
-  const prev = INFORMES.filter(x => x.numero < R.numero).sort((a,b) => b.numero - a.numero)[0];
-  let ult = null, sub = "";
-  if (prev){ ult = (ej - prev.avance.ejecutado) * 100; sub = `Del ${prev.cierre} al ${R.cierre}`; }
-  else if (R.semanal && R.semanal.real && R.semanal.real.length >= 4){ ult = R.semanal.real.slice(-4).reduce((a,b)=>a+b,0) * 30 / 28; sub = "Últimas 4 semanas, llevado a 30 días"; }
-  return { req, ult, sub };
-}
-function ledeRitmo(R){
-  const T = ritmoTermino(R); if (T.req == null) return "";
-  return ` Para terminar en plazo debe avanzar ${n(T.req,1)}% por mes${T.ult != null ? `; en el último mes avanzó ${n(T.ult,1)}%` : ""}.`;
-}
-function bloqueRitmo(R){
-  const T = ritmoTermino(R); if (T.req == null) return "";
-  const fin = R.proyecto.termino;
-  const nota = T.ult == null
-    ? `Es el avance promedio que la obra debe lograr cada mes, desde el cierre hasta el ${fin}, para llegar al 100% en la fecha de término.`
-    : T.ult >= T.req
-      ? `El avance del último mes alcanza el ritmo necesario para terminar en la fecha de término (${fin}).`
-      : `Para terminar el ${fin}, la obra debe avanzar en promedio ${n(T.req,1)}% por mes, más que el ${n(T.ult,1)}% logrado en el último mes.`;
-  return `
-    <h3>Ritmo para terminar en plazo</h3>
-    <dl class="stats">
-      ${stat("Avance necesario por mes", n(T.req,1)+"%", `Promedio hasta el ${fin}`)}
-      ${T.ult != null ? stat("Avance del último mes", n(T.ult,1)+"%", T.sub) : ""}
-    </dl>
-    <p class="note" style="margin-top:-.75rem">${nota}</p>`;
-}
-
 function vAvance(R){
   const A = R.avance, D = R.d, M = R.media.misc;
   return sec("avance", head(R,"avance","Avance físico",
-    `Ejecutado ${n(A.ejecutado*100,2)}% contra ${n(A.programado*100,2)}% programado: ${A.dias} días de adelanto.${ledeRitmo(R)}`) + `
+    `Ejecutado ${n(A.ejecutado*100,2)}% contra ${n(A.programado*100,2)}% programado: ${A.dias} días de adelanto. ${textoMensual(R)}`) + `
     <dl class="stats">
       ${stat("Programado a la fecha", n(A.programado*100,2)+"%", "Curva S contractual")}
       ${stat("Ejecutado a la fecha", n(A.ejecutado*100,2)+"%", "Avance real en terreno")}
       ${stat("Desviación", sgn(D.desviacion,2)+" pp", `${A.dias} días de adelanto`, "pos")}
-      ${stat("Plazo transcurrido", pct(D.transcurrido), `Día ${n(R.plazo.dia)} de ${n(R.proyecto.plazoDias)}`)}
-    </dl>${bloqueRitmo(R)}
+    </dl>
+    ${bloqueMensual(R)}
     <figure class="fig">
       <button type="button" data-lb="curvaS" aria-label="Ampliar curva S de avance físico"><img src="${M.curvaS.src}" alt="Curva S de avance físico: porcentaje acumulado previsto y real desde febrero de 2025 hasta febrero de 2027. Al ${A.curvaAl||R.cierre} el real es ${pct(A.ejecutado,2)} y el previsto ${pct(A.programado,2)}." decoding="async" loading="lazy" width="${M.curvaS.w}" height="${M.curvaS.h}"></button>
       <figcaption>Curva S de avance físico ${A.curvaAl?"al "+A.curvaAl:"al cierre del período"}. Azul: % acumulado previsto. Rojo: % acumulado real.</figcaption>
@@ -1232,6 +1222,7 @@ function lbStep(d){ LB.i = (LB.i + d + LB.list.length) % LB.list.length; lbShow(
    ARRANQUE
    ===================================================================== */
 INFORMES.forEach(derivar);
+INFORMES.forEach((x,i)=>{ x.mes = avanceMensual(x, INFORMES[i+1]); });
 let R = INFORMES[0];
 function render(){
   $("#logo").src = R.media.misc.logo.src;

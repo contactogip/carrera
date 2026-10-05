@@ -2,6 +2,8 @@
 
 Informe ejecutivo mensual de inspección técnica de obra del Edificio Carrera (código GIP_228), cliente Inmobiliaria Ruta Desarrollo Cuatro SpA, constructora Ingevec. Publicado por GIP Inspección Técnica de Obras.
 
+Publicado en https://informes.gip.cl/carrera/ (portada de todas las obras: https://informes.gip.cl).
+
 La página `index.html` muestra cada informe en una pestaña, con el más reciente marcado como vigente. Cada informe se puede abrir directo con `#n` y su número, por ejemplo `index.html#n18`.
 
 ## Informes cargados

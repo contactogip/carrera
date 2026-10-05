@@ -414,6 +414,13 @@ ol.hechos time{color:var(--muted);font-variant-numeric:tabular-nums;white-space:
 
 /* Avance mensual: dos cifras lado a lado */
 .stats.mes{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+/* Aviso de confidencialidad */
+.conf{margin:-1.25rem 0 2.25rem;padding:.65rem .9rem;border-left:3px solid var(--brand);background:var(--bg);font-size:var(--fs-xs);line-height:1.5;color:var(--ink-2);max-width:62ch}
+.conf strong{color:var(--ink)}
+footer.foot .conf-full{flex-basis:100%;max-width:92ch;margin:0;padding-top:1rem;border-top:1px solid var(--line);font-size:var(--fs-xs);line-height:1.55}
+/* En el PDF el aviso va en el pie de cada página y completo al final */
+@media print{.conf{display:none}footer.foot .conf-full{break-inside:avoid}}
 </style>
 </head>
 <body>
@@ -820,6 +827,7 @@ function vHero(R){
           <div><dt>Superficie</dt><dd>${n(P.superficie,2)} m²</dd></div>
           <div><dt>Plazo contractual</dt><dd><span class="nw">${P.inicio}</span> al <span class="nw">${P.termino}</span></dd></div>
         </dl>
+        <p class="conf"><strong>Confidencial.</strong> Enlace de uso personal del mandante de la obra. No lo reenvíe ni lo publique.</p>
       </div>
       <figure class="hero-photo">
         <button type="button" data-lb="hero" aria-label="Ampliar fotografía: fachada interior al cierre del mes">
@@ -1165,6 +1173,7 @@ function vFooter(R){
     <img class="logo-d" src="${R.media.misc.logoFullDark.src}" width="${R.media.misc.logoFullDark.w}" height="${R.media.misc.logoFullDark.h}" alt="GIP Inspección Técnica de Obras">
     <div><strong>GIP Inspección Técnica de Obras</strong><br>Av. Vitacura 5250, oficina 507, Vitacura, Santiago<br>contacto@gip.cl</div>
     <div><strong>Informe ejecutivo N° ${R.numero}, revisión ${R.revision}</strong><br>${R.proyecto.nombre} (${R.proyecto.codigo})<br>Período ${R.periodo.toLowerCase()}, cierre ${R.cierre}</div>
+    <p class="conf-full"><strong>Aviso de confidencialidad.</strong> Este informe y su enlace son confidenciales y de uso exclusivo del mandante de la obra y de las personas que este autorice. No deben reenviarse, publicarse ni compartirse con terceros sin autorización de GIP. Si recibió este enlace por error, avísenos a contacto@gip.cl y no utilice su contenido.</p>
   </footer>`;
 }
 

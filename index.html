@@ -578,7 +578,6 @@ const INFORMES = [
   semaforo:[
     { ambito:"Avance físico vs programa", estado:"verde", lectura:"Ejecutado 72,5% vs programado 71,6% (+0,87 pp, 5 días de adelanto)", ir:"avance" },
     { ambito:"Avance certificado en EEPP vs físico", estado:"verde", lectura:"Certificado en estados de pago 73,9% vs avance físico 72,5% (+1,45 pp)", ir:"financiero" },
-    { ambito:"Consumo de plazo", estado:"amarillo", lectura:"Plazo transcurrido 79,3% con avance físico 72,5% (0,91x), con el aumento de 22 días incluido", ir:"avance" },
     { ambito:"Hitos contractuales", estado:"amarillo", lectura:"Obra gruesa terminada el 23-04-2026, 48 días antes de lo programado (10-06-2026); recepción provisoria sin fecha informada por la constructora", ir:"hitos" },
     { ambito:"Vigencia de garantías", estado:"amarillo", lectura:"Boletas de anticipo (22-01-2027) y de fiel cumplimiento (19-02-2027) vencen antes del nuevo término, 05-03-2027", ir:"contrato" },
     { ambito:"Obras adicionales", estado:"verde", lectura:"Aprobados UF 2.338,77 netos (0,72% del contrato neto); saldo por pagar UF 233,62", ir:"adicionales" },
@@ -704,12 +703,10 @@ const INFORMES = [
   ],
   /* Semáforo. Reglas: avance vs programa (verde ≥ 0 pp, amarillo hasta −2 pp, rojo bajo −2 pp);
      certificado en EEPP vs físico (verde hasta ±2 pp, amarillo hasta ±5 pp, rojo sobre 5 pp);
-     ritmo físico/plazo (verde ≥ 0,95x, amarillo 0,85x a 0,95x, rojo bajo 0,85x);
      cierre de RDI (verde ≥ 90%, amarillo 75% a 90%, rojo bajo 75%); adicionales (verde bajo 3% del neto). */
   semaforo:[
     { ambito:"Avance físico vs programa", estado:"verde", lectura:"Ejecutado 67,6% vs programado 66,7% (+0,95 pp, 5 días de adelanto)", ir:"avance" },
     { ambito:"Avance certificado en EEPP vs físico", estado:"verde", lectura:"Certificado en estados de pago 68,3% vs avance físico 67,6% (+0,64 pp)", ir:"financiero" },
-    { ambito:"Consumo de plazo", estado:"amarillo", lectura:"Plazo transcurrido 77,5% con avance físico 67,6% (0,87x)", ir:"avance" },
     { ambito:"Hitos contractuales", estado:"amarillo", lectura:"Obra gruesa terminada el 23-04-2026, 48 días antes de lo programado (10-06-2026); recepción provisoria sin fecha informada por la constructora", ir:"hitos" },
     { ambito:"Obras adicionales", estado:"verde", lectura:"Aprobados UF 2.338,77 netos (0,72% del contrato neto); saldo por pagar UF 404,65", ir:"adicionales" },
     { ambito:"Cierre de RDI", estado:"verde", lectura:"Tasa de cierre 97,7%, con 7 pendientes de 303", ir:"rdi" },
@@ -915,16 +912,47 @@ function vContrato(R){
     <p class="src">La boleta de fiel cumplimiento vence ${rel(G.fiel.vence)} del término contractual (${P.termino}) y las de anticipo vencen ${rel(an.vence)}. Las retenciones se devuelven ${lc(G.retencionDevolucion)}.</p>`);
 }
 
+/* Avance necesario por mes para terminar en plazo, y avance del último mes */
+function ritmoTermino(R){
+  const ej = R.avance.ejecutado, rest = R.plazo.restantes;
+  const req = rest > 0 ? (1 - ej) * 100 * 30 / rest : null;
+  const prev = INFORMES.filter(x => x.numero < R.numero).sort((a,b) => b.numero - a.numero)[0];
+  let ult = null, sub = "";
+  if (prev){ ult = (ej - prev.avance.ejecutado) * 100; sub = `Del ${prev.cierre} al ${R.cierre}`; }
+  else if (R.semanal && R.semanal.real && R.semanal.real.length >= 4){ ult = R.semanal.real.slice(-4).reduce((a,b)=>a+b,0) * 30 / 28; sub = "Últimas 4 semanas, llevado a 30 días"; }
+  return { req, ult, sub };
+}
+function ledeRitmo(R){
+  const T = ritmoTermino(R); if (T.req == null) return "";
+  return ` Para terminar en plazo debe avanzar ${n(T.req,1)}% por mes${T.ult != null ? `; en el último mes avanzó ${n(T.ult,1)}%` : ""}.`;
+}
+function bloqueRitmo(R){
+  const T = ritmoTermino(R); if (T.req == null) return "";
+  const fin = R.proyecto.termino;
+  const nota = T.ult == null
+    ? `Es el avance promedio que la obra debe lograr cada mes, desde el cierre hasta el ${fin}, para llegar al 100% en la fecha de término.`
+    : T.ult >= T.req
+      ? `El avance del último mes alcanza el ritmo necesario para terminar en la fecha de término (${fin}).`
+      : `Para terminar el ${fin}, la obra debe avanzar en promedio ${n(T.req,1)}% por mes, más que el ${n(T.ult,1)}% logrado en el último mes.`;
+  return `
+    <h3>Ritmo para terminar en plazo</h3>
+    <dl class="stats">
+      ${stat("Avance necesario por mes", n(T.req,1)+"%", `Promedio hasta el ${fin}`)}
+      ${T.ult != null ? stat("Avance del último mes", n(T.ult,1)+"%", T.sub) : ""}
+    </dl>
+    <p class="note" style="margin-top:-.75rem">${nota}</p>`;
+}
+
 function vAvance(R){
   const A = R.avance, D = R.d, M = R.media.misc;
   return sec("avance", head(R,"avance","Avance físico",
-    `Ejecutado ${n(A.ejecutado*100,2)}% contra ${n(A.programado*100,2)}% programado: ${A.dias} días de adelanto. El ritmo físico respecto del plazo consumido es ${n(D.ritmo,2)}x.`) + `
+    `Ejecutado ${n(A.ejecutado*100,2)}% contra ${n(A.programado*100,2)}% programado: ${A.dias} días de adelanto.${ledeRitmo(R)}`) + `
     <dl class="stats">
       ${stat("Programado a la fecha", n(A.programado*100,2)+"%", "Curva S contractual")}
       ${stat("Ejecutado a la fecha", n(A.ejecutado*100,2)+"%", "Avance real en terreno")}
       ${stat("Desviación", sgn(D.desviacion,2)+" pp", `${A.dias} días de adelanto`, "pos")}
-      ${stat("Ritmo físico / plazo", n(D.ritmo,2)+"x", "Avance ejecutado sobre plazo transcurrido")}
-    </dl>
+      ${stat("Plazo transcurrido", pct(D.transcurrido), `Día ${n(R.plazo.dia)} de ${n(R.proyecto.plazoDias)}`)}
+    </dl>${bloqueRitmo(R)}
     <figure class="fig">
       <button type="button" data-lb="curvaS" aria-label="Ampliar curva S de avance físico"><img src="${M.curvaS.src}" alt="Curva S de avance físico: porcentaje acumulado previsto y real desde febrero de 2025 hasta febrero de 2027. Al ${A.curvaAl||R.cierre} el real es ${pct(A.ejecutado,2)} y el previsto ${pct(A.programado,2)}." decoding="async" loading="lazy" width="${M.curvaS.w}" height="${M.curvaS.h}"></button>
       <figcaption>Curva S de avance físico ${A.curvaAl?"al "+A.curvaAl:"al cierre del período"}. Azul: % acumulado previsto. Rojo: % acumulado real.</figcaption>
@@ -974,7 +1002,6 @@ function vFinanciero(R){
         <tr><td>Anticipo amortizado</td><td class="r">${pct(D.amortizado)}</td><td>Devolución proporcional en cada estado de pago</td></tr>
         <tr><td>Pagado del contrato (EEPP y anticipos)</td><td class="r">${pct(D.pagado,2)}</td><td>IVA incluido</td></tr>
         <tr><td>Plazo transcurrido</td><td class="r">${pct(D.transcurrido)}</td><td>Día ${n(R.plazo.dia)} de ${n(R.proyecto.plazoDias)}</td></tr>
-        <tr><td>Ritmo de avance respecto del plazo</td><td class="r">${n(D.ritmo,2)}x</td><td>Bajo 1,00x el consumo de plazo supera al avance físico</td></tr>
       </tbody>
     </table></div>`);
 }
